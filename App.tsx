@@ -798,6 +798,17 @@ const FinalStageView: React.FC<{ tournament: Tournament, onRecordFinalStageResul
 };
 
 const FinalMatchComponent: React.FC<{ tournamentId: string, match: FinalMatch, onRecordResult: TournamentViewProps['onRecordFinalStageResult'] }> = ({ tournamentId, match, onRecordResult }) => {
+    if (match.result) {
+        const winnerName = match.result === 'p1_win' ? match.p1 : match.p2;
+        return (
+            <div style={{textAlign: 'center', padding: '1rem 0'}}>
+                <TrophyIcon style={{color: '#facc15', width: '60px', height: '60px', margin: '0 auto 1rem'}} />
+                <h4 style={{margin: 0, fontSize: '1.5rem', color: '#fef9c3', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em'}}>Campeão</h4>
+                <p style={{margin: '0.5rem 0 0', fontSize: '2.5rem', fontWeight: 'bold', color: '#fef3c7', textTransform: 'uppercase'}}>{winnerName}</p>
+            </div>
+        );
+    }
+
     const p1Name = match.p1 || match.p1Source;
     const p2Name = match.p2 || match.p2Source;
     const canRecord = match.p1 && match.p2;

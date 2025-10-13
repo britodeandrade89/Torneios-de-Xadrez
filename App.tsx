@@ -229,6 +229,40 @@ const App: React.FC = () => {
     });
 
     const [isAppEntered, setIsAppEntered] = useState(false);
+    const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+
+    useEffect(() => {
+        const handler = (e: Event) => {
+            e.preventDefault();
+            console.log('beforeinstallprompt event fired');
+            setInstallPrompt(e);
+        };
+
+        window.addEventListener('beforeinstallprompt', handler);
+
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handler);
+        };
+    }, []);
+
+    const handleInstallClick = () => {
+        if (!installPrompt) {
+            return;
+        }
+        // The `prompt()` method can only be called once.
+        (installPrompt as any).prompt();
+
+        // Wait for the user to respond to the prompt
+        (installPrompt as any).userChoice.then((choiceResult: { outcome: string }) => {
+            if (choiceResult.outcome === 'accepted') {
+                console.log('User accepted the A2HS prompt');
+            } else {
+                console.log('User dismissed the A2HS prompt');
+            }
+            // We can't use the installPrompt again, so clear it.
+            setInstallPrompt(null);
+        });
+    };
 
     useEffect(() => {
         localStorage.setItem('tournaments', JSON.stringify(tournaments));
@@ -432,6 +466,11 @@ const App: React.FC = () => {
                         <StyledButton onClick={() => setActiveTournamentId(null)}>
                             Criar Novo Torneio
                         </StyledButton>
+                        {installPrompt && (
+                            <StyledButton onClick={handleInstallClick}>
+                                Instalar App
+                            </StyledButton>
+                        )}
                     </div>
                 </header>
                 

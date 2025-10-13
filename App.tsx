@@ -430,7 +430,10 @@ const TournamentInProgressView: React.FC<{tournament: Tournament, onRecordGroupR
                         <div>
                             <h5 style={{marginTop: 0, marginBottom: '1rem', color: '#cbd5e1', fontWeight: 600}}>Partidas</h5>
                             {groupData.schedule.map((round, roundIndex) => (
-                                <div key={roundIndex}>
+                                <div key={roundIndex} style={{ marginBottom: '1rem' }}>
+                                     <h6 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.9rem' }}>
+                                        Rodada {roundIndex + 1}
+                                    </h6>
                                     {round.map((match, matchIndex) => (
                                         <div key={matchIndex} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #4b5563', gap: '0.5rem' }}>
                                             <span>{match.p1} vs {match.p2}</span>
@@ -539,7 +542,10 @@ const FinalRoundRobinComponent: React.FC<{ tournamentId: string, finalStage: Fin
             <div>
                 <h4 style={{marginTop: 0, color: '#cbd5e1', fontWeight: 600}}>Partidas Finais</h4>
                 {finalStage.schedule.map((round, roundIndex) => (
-                    <div key={roundIndex}>
+                    <div key={roundIndex} style={{ marginBottom: '1rem' }}>
+                        <h6 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#94a3b8', fontWeight: 600, fontSize: '0.9rem' }}>
+                            Rodada {roundIndex + 1}
+                        </h6>
                         {round.map((match, matchIndex) => (
                            <div key={matchIndex} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid #4b5563', gap: '0.5rem' }}>
                                 <span>{match.p1} vs {match.p2}</span>

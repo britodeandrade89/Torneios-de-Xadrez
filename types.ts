@@ -16,6 +16,7 @@ export interface GroupData {
     players: string[];
     schedule: Match[][];
     standings: Record<string, Standing>;
+    previousRankOrder?: string[];
 }
 
 export interface FinalMatch {
@@ -32,6 +33,7 @@ export interface FinalRoundRobin {
     players: string[];
     schedule: Match[][];
     standings: Record<string, Standing>;
+    previousRankOrder?: string[];
 }
 
 export interface NoFinalStage {

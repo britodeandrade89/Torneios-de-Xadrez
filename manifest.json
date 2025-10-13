@@ -1,0 +1,21 @@
+{
+  "short_name": "Xadrez",
+  "name": "TORNEIOS DE XADREZ",
+  "description": "Uma aplicação moderna para criar e gerenciar torneios de xadrez.",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#000000",
+  "display": "standalone",
+  "theme_color": "#ca8a04"
+}

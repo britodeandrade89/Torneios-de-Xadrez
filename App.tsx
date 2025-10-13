@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tournament, Match, Standing, GroupData, FinalStage, FinalMatch, FinalRoundRobin } from './types';
 
 // --- ICONS ---
@@ -214,9 +214,33 @@ const SplashScreen: React.FC<{ onEnter: () => void }> = ({ onEnter }) => {
 
 // Main App component
 const App: React.FC = () => {
-    const [tournaments, setTournaments] = useState<Record<string, Tournament>>({});
-    const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+    const [tournaments, setTournaments] = useState<Record<string, Tournament>>(() => {
+        try {
+            const savedTournaments = localStorage.getItem('tournaments');
+            return savedTournaments ? JSON.parse(savedTournaments) : {};
+        } catch (error) {
+            console.error("Failed to parse tournaments from localStorage", error);
+            return {};
+        }
+    });
+
+    const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => {
+        return localStorage.getItem('activeTournamentId') || null;
+    });
+
     const [isAppEntered, setIsAppEntered] = useState(false);
+
+    useEffect(() => {
+        localStorage.setItem('tournaments', JSON.stringify(tournaments));
+    }, [tournaments]);
+
+    useEffect(() => {
+        if (activeTournamentId) {
+            localStorage.setItem('activeTournamentId', activeTournamentId);
+        } else {
+            localStorage.removeItem('activeTournamentId');
+        }
+    }, [activeTournamentId]);
     
     const calculateStandings = (players: string[], schedule: Match[][]): Record<string, Standing> => {
         const standings: Record<string, Standing> = players.reduce((acc, playerName) => {

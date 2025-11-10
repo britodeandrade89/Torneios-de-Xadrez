@@ -1,4 +1,4 @@
-const CACHE_NAME = 'torneios-de-xadrez-v2'; // Version bumped
+const CACHE_NAME = 'torneios-de-xadrez-v3'; // Version bumped
 const urlsToCache = [
   '/',
   '/index.html',
@@ -6,12 +6,15 @@ const urlsToCache = [
   '/App.tsx',
   '/types.ts',
   '/data.ts',
+  '/firebase.ts',
   '/icon-192x192.svg',
   '/icon-512x512.svg',
   '/manifest.json',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap',
-  'https://fonts.gstatic.com/s/poppins/v21/pxiByp8kv8JHgFVrLBT5Z1xlFQ.woff2'
+  'https://fonts.gstatic.com/s/poppins/v21/pxiByp8kv8JHgFVrLBT5Z1xlFQ.woff2',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
 ];
 
 // Install: Cache the app shell

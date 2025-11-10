@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Tournament, Match, Standing, GroupData, FinalStage, FinalMatch, FinalRoundRobin } from './types';
+import { db } from './firebase';
+import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
 
 // --- ICONS ---
 const TrophyIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
 const UpArrowIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: '#4ade80', display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }}><path d="M12 5L12 19M12 5L6 11M12 5L18 11" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const DownArrowIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: '#f87171', display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }}><path d="M12 19L12 5M12 19L18 13M12 19L6 13" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const ClockIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+const TrashIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 
 
 // Helper function to generate a round-robin schedule
@@ -211,19 +215,75 @@ const SplashScreen: React.FC<{ onEnter: () => void }> = ({ onEnter }) => {
     );
 };
 
+// --- CLOCK & TIMER COMPONENTS ---
+const BrasiliaClock: React.FC = () => {
+    const [time, setTime] = useState('');
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const brasiliaTime = new Date().toLocaleTimeString('pt-BR', {
+                timeZone: 'America/Sao_Paulo',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            setTime(brasiliaTime);
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, []);
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#d6d3d1', fontSize: '0.9rem' }}>
+            <ClockIcon style={{ width: 16, height: 16 }} />
+            <span>Brasília: <strong>{time}</strong></span>
+        </div>
+    );
+};
+
+
+const ElapsedTime: React.FC<{ startTime: number }> = ({ startTime }) => {
+    const [elapsed, setElapsed] = useState('00:00:00');
+
+    const formatTime = (ms: number) => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    };
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            const diff = Date.now() - startTime;
+            setElapsed(formatTime(diff));
+        }, 1000);
+
+        return () => clearInterval(timer);
+    }, [startTime]);
+
+    return (
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            color: '#d6d3d1',
+            fontSize: '1rem',
+            marginBottom: '2rem',
+            padding: '0.5rem 1rem',
+            backgroundColor: 'rgba(0,0,0,0.2)',
+            borderRadius: '0.5rem'
+        }}>
+            <ClockIcon style={{ width: 20, height: 20, color: '#ca8a04' }} />
+            <span>Tempo Transcorrido: <strong>{elapsed}</strong></span>
+        </div>
+    );
+};
 
 // Main App component
 const App: React.FC = () => {
-    const [tournaments, setTournaments] = useState<Record<string, Tournament>>(() => {
-        try {
-            const savedTournaments = localStorage.getItem('tournaments');
-            return savedTournaments ? JSON.parse(savedTournaments) : {};
-        } catch (error) {
-            console.error("Failed to parse tournaments from localStorage", error);
-            return {};
-        }
-    });
-
+    const [tournaments, setTournaments] = useState<Record<string, Tournament>>({});
     const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => {
         return localStorage.getItem('activeTournamentId') || null;
     });
@@ -237,36 +297,42 @@ const App: React.FC = () => {
             console.log('beforeinstallprompt event fired');
             setInstallPrompt(e);
         };
-
         window.addEventListener('beforeinstallprompt', handler);
-
-        return () => {
-            window.removeEventListener('beforeinstallprompt', handler);
-        };
+        return () => window.removeEventListener('beforeinstallprompt', handler);
     }, []);
 
-    const handleInstallClick = () => {
-        if (!installPrompt) {
-            return;
-        }
-        // The `prompt()` method can only be called once.
-        (installPrompt as any).prompt();
+    // Listen for real-time updates from Firestore
+    useEffect(() => {
+        const q = query(collection(db, "tournaments"), orderBy("startTime", "desc"));
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const tournamentsData: Record<string, Tournament> = {};
+            querySnapshot.forEach((doc) => {
+                tournamentsData[doc.id] = doc.data() as Tournament;
+            });
+            setTournaments(tournamentsData);
 
-        // Wait for the user to respond to the prompt
+            // If the active tournament was deleted from another client, reset it.
+            if (activeTournamentId && !tournamentsData[activeTournamentId]) {
+                setActiveTournamentId(null);
+            }
+        });
+
+        return () => unsubscribe(); // Cleanup subscription on unmount
+    }, [activeTournamentId]);
+
+
+    const handleInstallClick = () => {
+        if (!installPrompt) return;
+        (installPrompt as any).prompt();
         (installPrompt as any).userChoice.then((choiceResult: { outcome: string }) => {
             if (choiceResult.outcome === 'accepted') {
                 console.log('User accepted the A2HS prompt');
             } else {
                 console.log('User dismissed the A2HS prompt');
             }
-            // We can't use the installPrompt again, so clear it.
             setInstallPrompt(null);
         });
     };
-
-    useEffect(() => {
-        localStorage.setItem('tournaments', JSON.stringify(tournaments));
-    }, [tournaments]);
 
     useEffect(() => {
         if (activeTournamentId) {
@@ -305,7 +371,6 @@ const App: React.FC = () => {
     };
 
     const checkAndAdvanceToFinalStage = (tournament: Tournament): Tournament => {
-        // Check if all group matches are played
         const allGroupMatchesPlayed = Object.values(tournament.groups).every(group =>
             group.schedule.flat().every(match => match.result !== null)
         );
@@ -314,21 +379,18 @@ const App: React.FC = () => {
             return tournament;
         }
 
-        // Get winners from each group
         const groupWinners = Object.keys(tournament.groups)
-            .sort() // Ensure consistent order (A, B, C...)
+            .sort()
             .map(groupId => getGroupWinner(tournament.groups[groupId]));
 
         const updatedTournament = JSON.parse(JSON.stringify(tournament));
 
         if (updatedTournament.finalStage.type === 'final_match' && groupWinners.length === 2) {
-            // Avoid re-populating if already done
             if(updatedTournament.finalStage.p1 === null) {
                 updatedTournament.finalStage.p1 = groupWinners[0];
                 updatedTournament.finalStage.p2 = groupWinners[1];
             }
         } else if (updatedTournament.finalStage.type === 'round_robin' && groupWinners.length > 2) {
-             // Avoid re-populating if already done
             if(updatedTournament.finalStage.players.length === 0) {
                 updatedTournament.finalStage.players = groupWinners;
                 updatedTournament.finalStage.schedule = generateRoundRobinSchedule(groupWinners);
@@ -339,11 +401,11 @@ const App: React.FC = () => {
         return updatedTournament;
     };
 
-    const handleCreateTournament = (name: string, playerNames: string[], grouping: number[]) => {
-        const newId = `tourn_${Date.now()}`;
+    const handleCreateTournament = async (name: string, playerNames: string[], grouping: number[]) => {
+        const newDocRef = doc(collection(db, 'tournaments'));
         
         const groups: Record<string, GroupData> = {};
-        const shuffledPlayers = [...playerNames].sort(() => Math.random() - 0.5); // Shuffle for fairness
+        const shuffledPlayers = [...playerNames].sort(() => Math.random() - 0.5);
         let playerIndex = 0;
 
         const createGroupData = (players: string[]): GroupData => ({
@@ -353,7 +415,7 @@ const App: React.FC = () => {
         });
         
         grouping.forEach((groupSize, index) => {
-            const groupId = String.fromCharCode(65 + index); // A, B, C...
+            const groupId = String.fromCharCode(65 + index);
             const groupPlayers = shuffledPlayers.slice(playerIndex, playerIndex + groupSize);
             playerIndex += groupSize;
             groups[groupId] = createGroupData(groupPlayers);
@@ -369,54 +431,67 @@ const App: React.FC = () => {
         }
 
         const newTournament: Tournament = {
-            id: newId,
+            id: newDocRef.id,
             name,
             players: playerNames,
             groups,
-            finalStage
+            finalStage,
+            startTime: Date.now()
         };
 
-        setTournaments(prev => ({ ...prev, [newId]: newTournament }));
-        setActiveTournamentId(newId);
+        await setDoc(newDocRef, newTournament);
+        setActiveTournamentId(newDocRef.id);
+    };
+
+    const updateTournamentInDb = async (tournamentId: string, updatedTournament: Tournament) => {
+        const tournamentRef = doc(db, "tournaments", tournamentId);
+        await setDoc(tournamentRef, updatedTournament);
     };
     
-    const handleRecordGroupResult = (tournamentId: string, groupId: string, roundIndex: number, matchIndex: number, result: 'p1_win' | 'p2_win' | 'draw') => {
-        setTournaments(prev => {
-            const updatedTournaments = { ...prev };
-            let tournament = JSON.parse(JSON.stringify(updatedTournaments[tournamentId]));
-            
-            const group = tournament.groups[groupId];
-            const previousSorted = sortStandings(Object.values(group.standings), group.schedule);
-            group.previousRankOrder = previousSorted.map(s => s.name);
+    const handleRecordGroupResult = async (tournamentId: string, groupId: string, roundIndex: number, matchIndex: number, result: 'p1_win' | 'p2_win' | 'draw') => {
+        const tournament = tournaments[tournamentId];
+        if (!tournament) return;
 
-            group.schedule[roundIndex][matchIndex].result = result;
-            group.standings = calculateStandings(group.players, group.schedule);
-            
-            tournament = checkAndAdvanceToFinalStage(tournament);
-            updatedTournaments[tournamentId] = tournament;
-            return updatedTournaments;
-        });
+        let updatedTournament = JSON.parse(JSON.stringify(tournament));
+        
+        const group = updatedTournament.groups[groupId];
+        const previousSorted = sortStandings(Object.values(group.standings), group.schedule);
+        group.previousRankOrder = previousSorted.map(s => s.name);
+
+        group.schedule[roundIndex][matchIndex].result = result;
+        group.standings = calculateStandings(group.players, group.schedule);
+        
+        updatedTournament = checkAndAdvanceToFinalStage(updatedTournament);
+        await updateTournamentInDb(tournamentId, updatedTournament);
     };
     
-    const handleRecordFinalStageResult = (tournamentId: string, result: 'p1_win' | 'p2_win' | 'draw', roundIndex?: number, matchIndex?: number) => {
-        setTournaments(prev => {
-            const updatedTournaments = { ...prev };
-            let tournament = JSON.parse(JSON.stringify(updatedTournaments[tournamentId]));
-            const { finalStage } = tournament;
+    const handleRecordFinalStageResult = async (tournamentId: string, result: 'p1_win' | 'p2_win' | 'draw', roundIndex?: number, matchIndex?: number) => {
+        const tournament = tournaments[tournamentId];
+        if (!tournament) return;
 
-            if (finalStage.type === 'final_match') {
-                finalStage.result = result;
-            } else if (finalStage.type === 'round_robin' && roundIndex !== undefined && matchIndex !== undefined) {
-                const previousSorted = sortStandings(Object.values(finalStage.standings), finalStage.schedule);
-                finalStage.previousRankOrder = previousSorted.map(s => s.name);
+        let updatedTournament = JSON.parse(JSON.stringify(tournament));
+        const { finalStage } = updatedTournament;
 
-                finalStage.schedule[roundIndex][matchIndex].result = result;
-                finalStage.standings = calculateStandings(finalStage.players, finalStage.schedule);
+        if (finalStage.type === 'final_match') {
+            finalStage.result = result;
+        } else if (finalStage.type === 'round_robin' && roundIndex !== undefined && matchIndex !== undefined) {
+            const previousSorted = sortStandings(Object.values(finalStage.standings), finalStage.schedule);
+            finalStage.previousRankOrder = previousSorted.map(s => s.name);
+
+            finalStage.schedule[roundIndex][matchIndex].result = result;
+            finalStage.standings = calculateStandings(finalStage.players, finalStage.schedule);
+        }
+
+        await updateTournamentInDb(tournamentId, updatedTournament);
+    };
+
+    const handleDeleteTournament = async (tournamentId: string) => {
+        if (window.confirm("Tem certeza que deseja excluir este torneio? Esta ação não pode ser desfeita.")) {
+            await deleteDoc(doc(db, "tournaments", tournamentId));
+            if (activeTournamentId === tournamentId) {
+                setActiveTournamentId(null);
             }
-
-            updatedTournaments[tournamentId] = tournament;
-            return updatedTournaments;
-        });
+        }
     };
 
     const styles = {
@@ -435,6 +510,18 @@ const App: React.FC = () => {
             fontSize: '0.9rem',
             minWidth: '200px',
             fontWeight: 500
+        },
+        deleteButton: {
+            background: '#7f1d1d',
+            color: '#fecaca',
+            border: 'none',
+            borderRadius: '0.5rem',
+            padding: '0.6rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 0.2s'
         }
     };
 
@@ -450,18 +537,31 @@ const App: React.FC = () => {
                         <TrophyIcon style={{color: '#ca8a04', width: 28, height: 28}}/>
                         <h1 style={styles.headerTitle}>TORNEIOS DE XADREZ</h1>
                     </div>
-                    <div style={styles.headerControls}>
+                    <div style={{...styles.headerControls, marginLeft: 'auto'}}>
+                        <BrasiliaClock />
                         {Object.keys(tournaments).length > 0 && (
-                             <select 
-                                value={activeTournamentId || ''}
-                                onChange={(e) => setActiveTournamentId(e.target.value)}
-                                style={styles.styledSelect}
-                             >
-                                 <option value="" disabled>Selecione um torneio</option>
-                                 {Object.values(tournaments).map((t: Tournament) => (
-                                     <option key={t.id} value={t.id}>{t.name}</option>
-                                 ))}
-                             </select>
+                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <select 
+                                    value={activeTournamentId || ''}
+                                    onChange={(e) => setActiveTournamentId(e.target.value)}
+                                    style={styles.styledSelect}
+                                >
+                                    <option value="" disabled>Selecione um torneio</option>
+                                    {Object.values(tournaments).map((t: Tournament) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                                {activeTournamentId && (
+                                    <button 
+                                        onClick={() => handleDeleteTournament(activeTournamentId)} 
+                                        style={styles.deleteButton}
+                                        title="Excluir torneio"
+                                        aria-label="Excluir torneio"
+                                    >
+                                        <TrashIcon style={{ width: 20, height: 20 }}/>
+                                    </button>
+                                )}
+                             </div>
                         )}
                         <StyledButton onClick={() => setActiveTournamentId(null)}>
                             Criar Novo Torneio
@@ -763,7 +863,8 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
 
 const TournamentInProgressView: React.FC<{tournament: Tournament, onRecordGroupResult: TournamentViewProps['onRecordGroupResult'], onRecordFinalStageResult: TournamentViewProps['onRecordFinalStageResult']}> = ({ tournament, onRecordGroupResult, onRecordFinalStageResult }) => (
     <div>
-        <h2 style={{ marginTop: 0, marginBottom: '2rem', color: '#fef3c7', fontSize: '2.5rem', textAlign: 'center', fontWeight: 800 }}>{tournament.name}</h2>
+        <h2 style={{ marginTop: 0, marginBottom: '0.5rem', color: '#fef3c7', fontSize: '2.5rem', textAlign: 'center', fontWeight: 800 }}>{tournament.name}</h2>
+        <ElapsedTime startTime={tournament.startTime} />
         <h3 style={{ color: '#fef3c7', fontSize: '1.75rem', borderBottom: '2px solid #ca8a04', paddingBottom: '0.5rem', marginBottom: '1.5rem', fontWeight: 700 }}>Fase de Grupos</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
             {(Object.entries(tournament.groups) as [string, GroupData][]).map(([groupId, groupData]) => (
@@ -795,7 +896,7 @@ const TournamentInProgressView: React.FC<{tournament: Tournament, onRecordGroupR
                                         {byePlayer && (
                                             <div style={byePlayerStyle}>
                                                  <ClockIcon style={{ width: 16, height: 16, marginRight: '0.5rem', color: '#fcd34d' }} />
-                                                 <span><strong>{byePlayer}</strong> está de espera (BYE)</span>
+                                                 <span><strong>{byePlayer}</strong> está de espera</span>
                                             </div>
                                         )}
                                     </div>
@@ -929,7 +1030,7 @@ const FinalRoundRobinComponent: React.FC<{ tournamentId: string, finalStage: Fin
                              {byePlayer && (
                                 <div style={byePlayerStyle}>
                                      <ClockIcon style={{ width: 16, height: 16, marginRight: '0.5rem', color: '#fcd34d' }} />
-                                     <span><strong>{byePlayer}</strong> está de espera (BYE)</span>
+                                     <span><strong>{byePlayer}</strong> está de espera</span>
                                 </div>
                             )}
                         </div>

@@ -13,8 +13,8 @@ const TrashIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="ht
 
 
 // Helper function to generate a round-robin schedule
-const generateRoundRobinSchedule = (playerNames: string[]): Match[][] => {
-    const schedule: Match[][] = [];
+const generateRoundRobinSchedule = (playerNames: string[]): Record<string, Match[]> => {
+    const schedule: Record<string, Match[]> = {};
     let players = [...playerNames];
     if (players.length % 2 !== 0) {
         players.push("BYE");
@@ -30,7 +30,7 @@ const generateRoundRobinSchedule = (playerNames: string[]): Match[][] => {
                 roundMatches.push({ p1, p2, result: null });
             }
         }
-        schedule.push(roundMatches);
+        schedule[round] = roundMatches;
         const lastPlayer = players.pop();
         if (lastPlayer) {
             players.splice(1, 0, lastPlayer);
@@ -39,8 +39,8 @@ const generateRoundRobinSchedule = (playerNames: string[]): Match[][] => {
     return schedule;
 };
 
-const sortStandings = (standings: Standing[], schedule: Match[][]): Standing[] => {
-    const flatSchedule = schedule.flat();
+const sortStandings = (standings: Standing[], schedule: Record<string, Match[]>): Standing[] => {
+    const flatSchedule = Object.values(schedule).flat();
 
     // Use slice() to create a shallow copy before sorting, as .sort() is in-place
     return standings.slice().sort((a, b) => {
@@ -342,13 +342,13 @@ const App: React.FC = () => {
         }
     }, [activeTournamentId]);
     
-    const calculateStandings = (players: string[], schedule: Match[][]): Record<string, Standing> => {
+    const calculateStandings = (players: string[], schedule: Record<string, Match[]>): Record<string, Standing> => {
         const standings: Record<string, Standing> = players.reduce((acc, playerName) => {
             acc[playerName] = { name: playerName, points: 0, wins: 0, draws: 0, losses: 0 };
             return acc;
         }, {} as Record<string, Standing>);
 
-        schedule.flat().forEach(match => {
+        Object.values(schedule).flat().forEach(match => {
             if (match.result) {
                 if (match.result === 'p1_win') {
                     standings[match.p1].wins += 1;
@@ -372,7 +372,7 @@ const App: React.FC = () => {
 
     const checkAndAdvanceToFinalStage = (tournament: Tournament): Tournament => {
         const allGroupMatchesPlayed = Object.values(tournament.groups).every(group =>
-            group.schedule.flat().every(match => match.result !== null)
+            Object.values(group.schedule).flat().every(match => match.result !== null)
         );
 
         if (!allGroupMatchesPlayed || tournament.finalStage.type === 'none') {
@@ -427,7 +427,7 @@ const App: React.FC = () => {
         } else if (grouping.length === 2) {
             finalStage = { type: 'final_match', p1: null, p2: null, result: null, p1Source: 'Vencedor Grupo A', p2Source: 'Vencedor Grupo B' };
         } else {
-            finalStage = { type: 'round_robin', players: [], schedule: [], standings: {} };
+            finalStage = { type: 'round_robin', players: [], schedule: {}, standings: {} };
         }
 
         const newTournament: Tournament = {
@@ -660,7 +660,7 @@ const StyledButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & { v
 
 const StandingsTable: React.FC<{
     standings: Record<string, Standing>,
-    schedule: Match[][],
+    schedule: Record<string, Match[]>,
     previousRankOrder?: string[]
 }> = ({ standings, schedule, previousRankOrder }) => {
     const standingsArray = sortStandings(Object.values(standings), schedule);
@@ -873,7 +873,7 @@ const TournamentInProgressView: React.FC<{tournament: Tournament, onRecordGroupR
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
                         <div>
                             <h5 style={{marginTop: 0, marginBottom: '1rem', color: '#e7e5e4', fontWeight: 600}}>Partidas</h5>
-                            {groupData.schedule.map((round, roundIndex) => {
+                            {Object.values(groupData.schedule).map((round, roundIndex) => {
                                 const playersInRound = round.flatMap(match => [match.p1, match.p2]);
                                 const byePlayer = groupData.players.find(p => p !== "BYE" && !playersInRound.includes(p));
 
@@ -920,8 +920,6 @@ const FinalStageView: React.FC<{ tournament: Tournament, onRecordFinalStageResul
     const { finalStage } = tournament;
 
     if (finalStage.type === 'none') {
-        // Fix for lines 465-466: Argument of type 'unknown' and property 'schedule' does not exist on type 'unknown'.
-        // Switched to Object.keys to safely access the first group and resolve type inference issues.
         const groupKeys = Object.keys(tournament.groups);
         if (groupKeys.length === 0) {
             return null;
@@ -929,7 +927,7 @@ const FinalStageView: React.FC<{ tournament: Tournament, onRecordFinalStageResul
         const group = tournament.groups[groupKeys[0]];
 
         const winner = getGroupWinner(group);
-        const allMatchesPlayed = group.schedule.flat().every(m => m.result);
+        const allMatchesPlayed = Object.values(group.schedule).flat().every(m => m.result);
         if (!allMatchesPlayed) return null;
 
         return (
@@ -1007,7 +1005,8 @@ const FinalRoundRobinComponent: React.FC<{ tournamentId: string, finalStage: Fin
          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
             <div>
                 <h4 style={{marginTop: 0, color: '#e7e5e4', fontWeight: 600}}>Partidas Finais</h4>
-                {finalStage.schedule.map((round, roundIndex) => {
+                {/* Fix: Explicitly type `round` to resolve type inference issues with `Object.values`. */}
+                {Object.values(finalStage.schedule).map((round: Match[], roundIndex) => {
                     const playersInRound = round.flatMap(match => [match.p1, match.p2]);
                     const byePlayer = finalStage.players.find(p => p !== "BYE" && !playersInRound.includes(p));
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tournament, Match, Standing, GroupData, FinalStage, FinalMatch, FinalRoundRobin } from './types';
 import { db } from './firebase';
@@ -10,6 +11,7 @@ const UpArrowIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const DownArrowIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ color: '#f87171', display: 'inline-block', verticalAlign: 'middle', marginLeft: '4px' }}><path d="M12 19L12 5M12 19L18 13M12 19L6 13" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 const ClockIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 const TrashIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
+const DownloadIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
 
 
 // Helper function to generate a round-robin schedule
@@ -281,6 +283,78 @@ const ElapsedTime: React.FC<{ startTime: number }> = ({ startTime }) => {
     );
 };
 
+// --- PWA Install Banner ---
+const InstallPWA: React.FC<{ onInstall: () => void; onDismiss: () => void; }> = ({ onInstall, onDismiss }) => {
+    const bannerStyle: React.CSSProperties = {
+        position: 'fixed',
+        bottom: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        backgroundColor: '#292524',
+        padding: '1rem 1.5rem',
+        borderRadius: '0.75rem',
+        border: '1px solid #ca8a04',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1rem',
+        zIndex: 1000,
+        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        animation: 'slideInUp 0.5s ease-out',
+        flexWrap: 'wrap',
+        maxWidth: 'calc(100% - 40px)'
+    };
+
+    const dismissButtonStyle: React.CSSProperties = {
+        background: 'none',
+        border: 'none',
+        color: '#a8a29e',
+        cursor: 'pointer',
+        fontSize: '0.9rem',
+        padding: '0.5rem',
+        marginLeft: '0.5rem'
+    };
+
+    const textStyle: React.CSSProperties = {
+        color: '#e7e5e4',
+        fontWeight: 500
+    };
+
+    const keyframes = `
+        @keyframes slideInUp {
+            from {
+                transform: translate(-50%, 100px);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, 0);
+                opacity: 1;
+            }
+        }
+    `;
+
+    return (
+        <>
+            <style>{keyframes}</style>
+            <div style={bannerStyle} role="dialog" aria-labelledby="install-dialog-title" aria-describedby="install-dialog-description">
+                <DownloadIcon style={{ color: '#facc15', flexShrink: 0 }} />
+                <div style={{ flexGrow: 1 }}>
+                    <h3 id="install-dialog-title" style={{ margin: 0, fontSize: '1rem', color: '#fef3c7' }}>Instalar o App</h3>
+                    <p id="install-dialog-description" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>Tenha acesso rápido e offline.</p>
+                </div>
+                <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
+                    <StyledButton onClick={onInstall} style={{padding: '0.5rem 1rem', fontSize: '0.9rem'}}>
+                        Instalar
+                    </StyledButton>
+                    <button onClick={onDismiss} style={dismissButtonStyle} aria-label="Dispensar">
+                        Agora não
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+};
+
+
 // Main App component
 const App: React.FC = () => {
     const [tournaments, setTournaments] = useState<Record<string, Tournament>>({});
@@ -290,6 +364,7 @@ const App: React.FC = () => {
 
     const [isAppEntered, setIsAppEntered] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+    const [showInstallBanner, setShowInstallBanner] = useState(true);
 
     useEffect(() => {
         const handler = (e: Event) => {
@@ -331,7 +406,12 @@ const App: React.FC = () => {
                 console.log('User dismissed the A2HS prompt');
             }
             setInstallPrompt(null);
+            setShowInstallBanner(false);
         });
+    };
+    
+    const handleDismissInstall = () => {
+        setShowInstallBanner(false);
     };
 
     useEffect(() => {
@@ -566,11 +646,6 @@ const App: React.FC = () => {
                         <StyledButton onClick={() => setActiveTournamentId(null)}>
                             Criar Novo Torneio
                         </StyledButton>
-                        {installPrompt && (
-                            <StyledButton onClick={handleInstallClick}>
-                                Instalar App
-                            </StyledButton>
-                        )}
                     </div>
                 </header>
                 
@@ -589,6 +664,9 @@ const App: React.FC = () => {
                     <p style={{ margin: '0.25rem 0 0 0' }}>Versão 1.0</p>
                 </footer>
             </main>
+            {installPrompt && showInstallBanner && (
+                <InstallPWA onInstall={handleInstallClick} onDismiss={handleDismissInstall} />
+            )}
         </div>
     );
 };
@@ -763,11 +841,6 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
     const handleCreateClick = () => {
         if (playerNames.every(name => name.trim())) {
             onCreateTournament(tournamentName, playerNames.map(name => name.trim()), selectedGrouping);
-            // Reset form
-            setTournamentName('');
-            setPlayerCount(4);
-            setPlayerNames(Array(4).fill(''));
-            setStep(1);
         } else {
             alert('Por favor, preencha o nome de todos os jogadores.');
         }
@@ -927,7 +1000,8 @@ const FinalStageView: React.FC<{ tournament: Tournament, onRecordFinalStageResul
         const group = tournament.groups[groupKeys[0]];
 
         const winner = getGroupWinner(group);
-        const allMatchesPlayed = Object.values(group.schedule).flat().every(m => m.result);
+        // Fix: Explicitly type `m` to resolve type inference issues.
+        const allMatchesPlayed = Object.values(group.schedule).flat().every((m: Match) => m.result);
         if (!allMatchesPlayed) return null;
 
         return (

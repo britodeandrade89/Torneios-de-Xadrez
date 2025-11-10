@@ -482,45 +482,51 @@ const App: React.FC = () => {
     };
 
     const handleCreateTournament = async (name: string, playerNames: string[], grouping: number[]) => {
-        const newDocRef = doc(collection(db, 'tournaments'));
-        
-        const groups: Record<string, GroupData> = {};
-        const shuffledPlayers = [...playerNames].sort(() => Math.random() - 0.5);
-        let playerIndex = 0;
+        try {
+            const newDocRef = doc(collection(db, 'tournaments'));
+            
+            const groups: Record<string, GroupData> = {};
+            const shuffledPlayers = [...playerNames].sort(() => Math.random() - 0.5);
+            let playerIndex = 0;
 
-        const createGroupData = (players: string[]): GroupData => ({
-            players,
-            schedule: generateRoundRobinSchedule(players),
-            standings: players.reduce((acc, p) => ({ ...acc, [p]: { name: p, points: 0, wins: 0, draws: 0, losses: 0 } }), {})
-        });
-        
-        grouping.forEach((groupSize, index) => {
-            const groupId = String.fromCharCode(65 + index);
-            const groupPlayers = shuffledPlayers.slice(playerIndex, playerIndex + groupSize);
-            playerIndex += groupSize;
-            groups[groupId] = createGroupData(groupPlayers);
-        });
-        
-        let finalStage: FinalStage;
-        if (grouping.length <= 1) {
-            finalStage = { type: 'none' };
-        } else if (grouping.length === 2) {
-            finalStage = { type: 'final_match', p1: null, p2: null, result: null, p1Source: 'Vencedor Grupo A', p2Source: 'Vencedor Grupo B' };
-        } else {
-            finalStage = { type: 'round_robin', players: [], schedule: {}, standings: {} };
+            const createGroupData = (players: string[]): GroupData => ({
+                players,
+                schedule: generateRoundRobinSchedule(players),
+                standings: players.reduce((acc, p) => ({ ...acc, [p]: { name: p, points: 0, wins: 0, draws: 0, losses: 0 } }), {})
+            });
+            
+            grouping.forEach((groupSize, index) => {
+                const groupId = String.fromCharCode(65 + index);
+                const groupPlayers = shuffledPlayers.slice(playerIndex, playerIndex + groupSize);
+                playerIndex += groupSize;
+                groups[groupId] = createGroupData(groupPlayers);
+            });
+            
+            let finalStage: FinalStage;
+            if (grouping.length <= 1) {
+                finalStage = { type: 'none' };
+            } else if (grouping.length === 2) {
+                finalStage = { type: 'final_match', p1: null, p2: null, result: null, p1Source: 'Vencedor Grupo A', p2Source: 'Vencedor Grupo B' };
+            } else {
+                finalStage = { type: 'round_robin', players: [], schedule: {}, standings: {} };
+            }
+
+            const newTournament: Tournament = {
+                id: newDocRef.id,
+                name,
+                players: playerNames,
+                groups,
+                finalStage,
+                startTime: Date.now()
+            };
+
+            await setDoc(newDocRef, newTournament);
+            setActiveTournamentId(newDocRef.id);
+        } catch (error: any) {
+            console.error("Error creating tournament: ", error);
+            alert("Ocorreu um erro ao criar o torneio. Por favor, tente novamente. Detalhes: " + error.message);
+            throw error; // Re-throw the error to be caught by the caller
         }
-
-        const newTournament: Tournament = {
-            id: newDocRef.id,
-            name,
-            players: playerNames,
-            groups,
-            finalStage,
-            startTime: Date.now()
-        };
-
-        await setDoc(newDocRef, newTournament);
-        setActiveTournamentId(newDocRef.id);
     };
 
     const updateTournamentInDb = async (tournamentId: string, updatedTournament: Tournament) => {
@@ -798,7 +804,7 @@ const StandingsTable: React.FC<{
 interface TournamentViewProps {
     activeTournamentId: string | null;
     tournaments: Record<string, Tournament>;
-    onCreateTournament: (name: string, players: string[], grouping: number[]) => void;
+    onCreateTournament: (name: string, players: string[], grouping: number[]) => Promise<void>;
     onRecordGroupResult: (tournamentId: string, groupId: string, roundIndex: number, matchIndex: number, result: 'p1_win' | 'p2_win' | 'draw') => void;
     onRecordFinalStageResult: (tournamentId: string, result: 'p1_win' | 'p2_win' | 'draw', roundIndex?: number, matchIndex?: number) => void;
 }
@@ -810,6 +816,20 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
     const [playerNames, setPlayerNames] = useState<string[]>(Array(4).fill(''));
     const [groupingOptions, setGroupingOptions] = useState<number[][]>([]);
     const [selectedGrouping, setSelectedGrouping] = useState<number[]>([]);
+    const [isCreating, setIsCreating] = useState(false);
+
+    useEffect(() => {
+        if (activeTournamentId === null) {
+            // Reset form state when starting a new tournament creation
+            setStep(1);
+            setTournamentName('');
+            setPlayerCount(4);
+            setPlayerNames(Array(4).fill(''));
+            setGroupingOptions([]);
+            setSelectedGrouping([]);
+            setIsCreating(false);
+        }
+    }, [activeTournamentId]);
 
     const handlePlayerCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const count = parseInt(e.target.value, 10) || 0;
@@ -838,11 +858,28 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
         setStep(2);
     };
 
-    const handleCreateClick = () => {
-        if (playerNames.every(name => name.trim())) {
-            onCreateTournament(tournamentName, playerNames.map(name => name.trim()), selectedGrouping);
-        } else {
+    const handleCreateClick = async () => {
+        const trimmedNames = playerNames.map(name => name.trim());
+
+        if (trimmedNames.some(name => name === '')) {
             alert('Por favor, preencha o nome de todos os jogadores.');
+            return;
+        }
+
+        const uniqueNames = new Set(trimmedNames);
+        if (uniqueNames.size !== trimmedNames.length) {
+            alert('Os nomes dos jogadores não podem ser repetidos.');
+            return;
+        }
+
+        setIsCreating(true);
+        try {
+            await onCreateTournament(tournamentName, trimmedNames, selectedGrouping);
+            // On success, the parent component will change the view, and the useEffect
+            // will handle state reset if another tournament is created later.
+        } catch (error) {
+            // The error is already alerted by the parent. Just reset the button.
+            setIsCreating(false);
         }
     };
 
@@ -919,8 +956,10 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
                             ))}
                          </div>
                         <div style={{display: 'flex', gap: '1rem', marginTop: '1rem'}}>
-                            <StyledButton onClick={() => setStep(2)} variant="secondary">Voltar</StyledButton>
-                            <StyledButton onClick={handleCreateClick}>Criar Torneio</StyledButton>
+                            <StyledButton onClick={() => setStep(2)} variant="secondary" disabled={isCreating}>Voltar</StyledButton>
+                            <StyledButton onClick={handleCreateClick} disabled={isCreating}>
+                                {isCreating ? 'Criando...' : 'Criar Torneio'}
+                            </StyledButton>
                         </div>
                     </div>
                 )}

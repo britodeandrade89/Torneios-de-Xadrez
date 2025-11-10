@@ -49,4 +49,5 @@ export interface Tournament {
     groups: Record<string, GroupData>; // Key is group name e.g. "A", "B"
     finalStage: FinalStage;
     startTime: number; // Timestamp of when the tournament started
+    roundDuration: number; // Duration of a round in milliseconds
 }

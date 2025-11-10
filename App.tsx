@@ -12,6 +12,7 @@ const DownArrowIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill
 const ClockIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
 const TrashIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>;
 const DownloadIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>;
+const BellIcon = ({ style }: { style?: React.CSSProperties }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>;
 
 
 // Helper function to generate a round-robin schedule
@@ -365,6 +366,9 @@ const App: React.FC = () => {
     const [isAppEntered, setIsAppEntered] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
     const [showInstallBanner, setShowInstallBanner] = useState(true);
+    const [notificationPermission, setNotificationPermission] = useState(Notification.permission);
+    const notificationTimeoutRef = React.useRef<number | null>(null);
+
 
     useEffect(() => {
         const handler = (e: Event) => {
@@ -394,6 +398,66 @@ const App: React.FC = () => {
 
         return () => unsubscribe(); // Cleanup subscription on unmount
     }, [activeTournamentId]);
+    
+    // Effect to schedule notifications for the next match
+    useEffect(() => {
+        if (notificationTimeoutRef.current) {
+            clearTimeout(notificationTimeoutRef.current);
+        }
+
+        if (notificationPermission !== 'granted' || !activeTournamentId) {
+            return;
+        }
+
+        const tournament = tournaments[activeTournamentId];
+        if (!tournament || !tournament.roundDuration) {
+            return;
+        }
+
+        let firstUnplayedMatch: Match | null = null;
+        let matchRoundIndex: number = -1;
+        let matchGroupId: string = '';
+
+        const sortedGroupIds = Object.keys(tournament.groups).sort();
+        for (const groupId of sortedGroupIds) {
+            const group = tournament.groups[groupId];
+            const sortedRoundIndexes = Object.keys(group.schedule).map(Number).sort((a, b) => a - b);
+            for (const roundIndex of sortedRoundIndexes) {
+                for (const match of group.schedule[roundIndex]) {
+                    if (!match.result) {
+                        firstUnplayedMatch = match;
+                        matchRoundIndex = roundIndex;
+                        matchGroupId = groupId;
+                        break;
+                    }
+                }
+                if (firstUnplayedMatch) break;
+            }
+            if (firstUnplayedMatch) break;
+        }
+
+        if (firstUnplayedMatch && matchRoundIndex !== -1) {
+            const roundStartTime = tournament.startTime + matchRoundIndex * tournament.roundDuration;
+            const notificationTime = roundStartTime - 15 * 60 * 1000; // 15 minutes before
+
+            if (notificationTime > Date.now()) {
+                const delay = notificationTime - Date.now();
+                const matchData = firstUnplayedMatch;
+                notificationTimeoutRef.current = window.setTimeout(() => {
+                    new Notification('Próxima partida em 15 minutos!', {
+                        body: `Grupo ${matchGroupId}: ${matchData.p1} vs ${matchData.p2}`,
+                        icon: '/icon-192x192.svg',
+                    });
+                }, delay);
+            }
+        }
+
+        return () => {
+            if (notificationTimeoutRef.current) {
+                clearTimeout(notificationTimeoutRef.current);
+            }
+        };
+    }, [activeTournamentId, tournaments, notificationPermission]);
 
 
     const handleInstallClick = () => {
@@ -412,6 +476,15 @@ const App: React.FC = () => {
     
     const handleDismissInstall = () => {
         setShowInstallBanner(false);
+    };
+    
+    const handleRequestNotificationPermission = async () => {
+        if (!('Notification' in window)) {
+            alert('Este navegador não suporta notificações.');
+            return;
+        }
+        const permission = await Notification.requestPermission();
+        setNotificationPermission(permission);
     };
 
     useEffect(() => {
@@ -481,7 +554,7 @@ const App: React.FC = () => {
         return updatedTournament;
     };
 
-    const handleCreateTournament = async (name: string, playerNames: string[], grouping: number[]) => {
+    const handleCreateTournament = async (name: string, playerNames: string[], grouping: number[], roundDurationInMinutes: number) => {
         try {
             const newDocRef = doc(collection(db, 'tournaments'));
             
@@ -517,7 +590,8 @@ const App: React.FC = () => {
                 players: playerNames,
                 groups,
                 finalStage,
-                startTime: Date.now()
+                startTime: Date.now(),
+                roundDuration: roundDurationInMinutes * 60 * 1000 // Convert to ms
             };
 
             await setDoc(newDocRef, newTournament);
@@ -625,6 +699,20 @@ const App: React.FC = () => {
                     </div>
                     <div style={{...styles.headerControls, marginLeft: 'auto'}}>
                         <BrasiliaClock />
+                         <button 
+                            onClick={handleRequestNotificationPermission}
+                            title="Ativar notificações"
+                            aria-label="Ativar notificações"
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0.5rem',
+                                color: notificationPermission === 'granted' ? '#4ade80' : (notificationPermission === 'denied' ? '#f87171' : '#d6d3d1')
+                            }}
+                        >
+                            <BellIcon style={{ width: 24, height: 24 }}/>
+                        </button>
                         {Object.keys(tournaments).length > 0 && (
                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                 <select 
@@ -804,7 +892,7 @@ const StandingsTable: React.FC<{
 interface TournamentViewProps {
     activeTournamentId: string | null;
     tournaments: Record<string, Tournament>;
-    onCreateTournament: (name: string, players: string[], grouping: number[]) => Promise<void>;
+    onCreateTournament: (name: string, players: string[], grouping: number[], roundDurationInMinutes: number) => Promise<void>;
     onRecordGroupResult: (tournamentId: string, groupId: string, roundIndex: number, matchIndex: number, result: 'p1_win' | 'p2_win' | 'draw') => void;
     onRecordFinalStageResult: (tournamentId: string, result: 'p1_win' | 'p2_win' | 'draw', roundIndex?: number, matchIndex?: number) => void;
 }
@@ -817,6 +905,7 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
     const [groupingOptions, setGroupingOptions] = useState<number[][]>([]);
     const [selectedGrouping, setSelectedGrouping] = useState<number[]>([]);
     const [isCreating, setIsCreating] = useState(false);
+    const [roundDurationInMinutes, setRoundDurationInMinutes] = useState(60);
 
     useEffect(() => {
         if (activeTournamentId === null) {
@@ -828,6 +917,7 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
             setGroupingOptions([]);
             setSelectedGrouping([]);
             setIsCreating(false);
+            setRoundDurationInMinutes(60);
         }
     }, [activeTournamentId]);
 
@@ -874,7 +964,7 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
 
         setIsCreating(true);
         try {
-            await onCreateTournament(tournamentName, trimmedNames, selectedGrouping);
+            await onCreateTournament(tournamentName, trimmedNames, selectedGrouping, roundDurationInMinutes);
             // On success, the parent component will change the view, and the useEffect
             // will handle state reset if another tournament is created later.
         } catch (error) {
@@ -916,6 +1006,10 @@ const TournamentView: React.FC<TournamentViewProps> = ({ activeTournamentId, tou
                             <label htmlFor="player-count" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: '#d6d3d1' }}>Número de Jogadores</label>
                             <StyledInput id="player-count" type="number" min="3" max="64" value={playerCount} onChange={handlePlayerCountChange} />
                              <p style={{fontSize: '0.8rem', color: '#a8a29e', margin: '0.5rem 0 0'}}>Mínimo de 3, máximo de 64.</p>
+                        </div>
+                        <div>
+                            <label htmlFor="round-duration" style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500, color: '#d6d3d1' }}>Duração da Rodada (minutos)</label>
+                            <StyledInput id="round-duration" type="number" min="5" value={roundDurationInMinutes} onChange={(e) => setRoundDurationInMinutes(parseInt(e.target.value, 10) || 0)} />
                         </div>
                         <StyledButton onClick={handleNextToGrouping}>Próximo</StyledButton>
                     </div>
